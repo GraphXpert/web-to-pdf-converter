@@ -61,6 +61,10 @@ app.post('/convert', async (req, res) => {
 
         console.log('Pagina caricata, generazione PDF...');
 
+        // Estrai il titolo della pagina per il nome del file
+        const pageTitle = await page.title();
+        const sanitizedTitle = pageTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+
         const pdfBuffer = await page.pdf({
             format: 'A4',
             printBackground: true,
@@ -75,8 +79,12 @@ app.post('/convert', async (req, res) => {
         await browser.close();
         console.log('PDF generato con successo');
 
+        // Imposta gli header per forzare il download
         res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename=converted_${Date.now()}.pdf`);
+        res.setHeader('Content-Disposition', `attachment; filename="${sanitizedTitle}_${Date.now()}.pdf"`);
+        res.setHeader('Content-Length', pdfBuffer.length);
+        
+        // Invia il PDF
         res.send(pdfBuffer);
 
     } catch (error) {
