@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web to PDF Converter</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="url"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .loading {
+            display: none;
+            margin-top: 20px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Web to PDF Converter</h1>
+        <div class="form-group">
+            <label for="url">URL del sito web:</label>
+            <input type="url" id="url" required placeholder="https://esempio.com">
+        </div>
+        <button onclick="convertToPDF()">Converti in PDF</button>
+        <div id="loading" class="loading">
+            Conversione in corso... Per favore attendi.
+        </div>
+        <div id="status"></div>
+    </div>
+
+    <script>
+        async function convertToPDF() {
+            const urlInput = document.getElementById('url');
+            const statusDiv = document.getElementById('status');
+            const loadingDiv = document.getElementById('loading');
+
+            if (!urlInput.value) {
+                statusDiv.className = 'error';
+                statusDiv.textContent = 'Inserisci un URL valido';
+                return;
+            }
+
+            try {
+                loadingDiv.style.display = 'block';
+                statusDiv.textContent = '';
+
+                const response = await fetch('/convert', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ targetUrl: urlInput.value })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    statusDiv.className = 'success';
+                    statusDiv.textContent = `Conversione completata! ${data.fileCount} pagine convertite. I file PDF sono stati salvati in: ${data.outputDir}`;
+                } else {
+                    throw new Error(data.error || 'Errore durante la conversione');
+                }
+            } catch (error) {
+                statusDiv.className = 'error';
+                statusDiv.textContent = `Errore: ${error.message}`;
+            } finally {
+                loadingDiv.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>
