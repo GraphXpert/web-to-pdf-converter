@@ -46,6 +46,7 @@ async function getAllPageLinks(page, baseUrl) {
     return [...new Set(links)];
 }
 
+// Modifica la funzione di conversione nel server.js
 app.post('/convert', async (req, res) => {
     try {
         const { targetUrl } = req.body;
@@ -53,61 +54,47 @@ app.post('/convert', async (req, res) => {
             return res.status(400).json({ error: 'URL richiesto' });
         }
 
-        // Configura Puppeteer per funzionare su Render.com
         const browser = await puppeteer.launch({
-            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--single-process'
+            ],
             headless: true
         });
-        
+
         const page = await browser.newPage();
         await page.setViewport({ width: 1920, height: 1080 });
 
-        const visitedUrls = new Set();
-        const pdfs = [];
-        const baseUrl = new URL(targetUrl).origin;
+        await page.goto(targetUrl, { 
+            waitUntil: 'networkidle0',
+            timeout: 30000
+        });
 
-        async function processPage(pageUrl) {
-            if (visitedUrls.has(pageUrl)) return;
-            visitedUrls.add(pageUrl);
-
-            try {
-                await page.goto(pageUrl, { 
-                    waitUntil: 'networkidle0',
-                    timeout: 30000  // 30 secondi timeout
-                });
-                
-                const pdfBuffer = await page.pdf({
-                    format: 'A4',
-                    printBackground: true,
-                    margin: {
-                        top: '20px',
-                        right: '20px',
-                        bottom: '20px',
-                        left: '20px'
-                    }
-                });
-
-                const filename = pageUrl
-                    .replace(baseUrl, '')
-                    .replace(/[^a-zA-Z0-9]/g, '_')
-                    .replace(/_+/g, '_')
-                    .slice(0, 50) + '.pdf';
-
-                pdfs.push({
-                    filename,
-                    buffer: pdfBuffer
-                });
-
-                const links = await getAllPageLinks(page, baseUrl);
-                for (const link of links) {
-                    if (pdfs.length < 20) {  // Limite di 20 pagine per conversione
-                        await processPage(link);
-                    }
-                }
-            } catch (error) {
-                console.error(`Error processing ${pageUrl}:`, error);
+        const pdfBuffer = await page.pdf({
+            format: 'A4',
+            printBackground: true,
+            margin: {
+                top: '20px',
+                right: '20px',
+                bottom: '20px',
+                left: '20px'
             }
-        }
+        });
+
+        await browser.close();
+
+        // Invia il PDF direttamente al browser
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename=converted_${Date.now()}.pdf`);
+        res.send(pdfBuffer);
+
+    } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ error: 'Errore durante la conversione: ' + error.message });
+    }
+});
 
         await processPage(targetUrl);
         await browser.close();

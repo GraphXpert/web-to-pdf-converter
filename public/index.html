@@ -81,43 +81,54 @@
 
     <script>
         async function convertToPDF() {
-            const urlInput = document.getElementById('url');
-            const statusDiv = document.getElementById('status');
-            const loadingDiv = document.getElementById('loading');
+    const urlInput = document.getElementById('url');
+    const statusDiv = document.getElementById('status');
+    const loadingDiv = document.getElementById('loading');
 
-            if (!urlInput.value) {
-                statusDiv.className = 'error';
-                statusDiv.textContent = 'Inserisci un URL valido';
-                return;
-            }
+    if (!urlInput.value) {
+        statusDiv.className = 'error';
+        statusDiv.textContent = 'Inserisci un URL valido';
+        return;
+    }
 
-            try {
-                loadingDiv.style.display = 'block';
-                statusDiv.textContent = '';
+    try {
+        loadingDiv.style.display = 'block';
+        statusDiv.textContent = '';
+        statusDiv.className = '';
 
-                const response = await fetch('/convert', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ targetUrl: urlInput.value })
-                });
+        const response = await fetch('/convert', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ targetUrl: urlInput.value })
+        });
 
-                const data = await response.json();
-
-                if (data.success) {
-                    statusDiv.className = 'success';
-                    statusDiv.textContent = `Conversione completata! ${data.fileCount} pagine convertite. I file PDF sono stati salvati in: ${data.outputDir}`;
-                } else {
-                    throw new Error(data.error || 'Errore durante la conversione');
-                }
-            } catch (error) {
-                statusDiv.className = 'error';
-                statusDiv.textContent = `Errore: ${error.message}`;
-            } finally {
-                loadingDiv.style.display = 'none';
-            }
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Errore durante la conversione');
         }
+
+        // Gestisce il download diretto del PDF
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `converted_${Date.now()}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+
+        statusDiv.className = 'success';
+        statusDiv.textContent = 'Conversione completata con successo!';
+    } catch (error) {
+        statusDiv.className = 'error';
+        statusDiv.textContent = `Errore: ${error.message}`;
+    } finally {
+        loadingDiv.style.display = 'none';
+    }
+}
     </script>
 </body>
 </html>
