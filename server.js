@@ -2,8 +2,6 @@
 const express = require('express');
 const puppeteer = require('puppeteer');
 const path = require('path');
-const url = require('url');
-const fs = require('fs').promises;
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 
@@ -11,8 +9,15 @@ const app = express();
 
 // Configurazione della sicurezza
 app.use(helmet({
-    contentSecurityPolicy: false  // Disabilitato per permettere il caricamento di risorse esterne
+    contentSecurityPolicy: false
 }));
+
+// Configurazione CORS
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+    next();
+});
 
 // Configurazione del rate limiting
 const limiter = rateLimit({
@@ -21,38 +26,18 @@ const limiter = rateLimit({
     message: 'Troppe richieste da questo IP, riprova tra un\'ora'
 });
 
-app.use('/convert', limiter);  // Applica il rate limiting solo alle conversioni
+app.use('/convert', limiter);
 app.use(express.json());
 app.use(express.static('public'));
 
-// Funzione per ottenere tutti i link da una pagina
-async function getAllPageLinks(page, baseUrl) {
-    const links = await page.evaluate((baseUrl) => {
-        const anchors = document.querySelectorAll('a');
-        return Array.from(anchors)
-            .map(anchor => {
-                let href = anchor.href;
-                if (href.startsWith('/')) {
-                    href = new URL(href, baseUrl).href;
-                }
-                return href;
-            })
-            .filter(href => 
-                href.startsWith(baseUrl) && 
-                !href.includes('#') && 
-                !href.match(/\.(jpg|jpeg|png|gif|pdf|zip)$/i)
-            );
-    }, baseUrl);
-    return [...new Set(links)];
-}
-
-// Modifica la funzione di conversione nel server.js
 app.post('/convert', async (req, res) => {
     try {
         const { targetUrl } = req.body;
         if (!targetUrl) {
             return res.status(400).json({ error: 'URL richiesto' });
         }
+
+        console.log('Iniziando la conversione per:', targetUrl);
 
         const browser = await puppeteer.launch({
             args: [
@@ -67,10 +52,14 @@ app.post('/convert', async (req, res) => {
         const page = await browser.newPage();
         await page.setViewport({ width: 1920, height: 1080 });
 
+        console.log('Browser avviato, navigazione alla pagina...');
+
         await page.goto(targetUrl, { 
             waitUntil: 'networkidle0',
             timeout: 30000
         });
+
+        console.log('Pagina caricata, generazione PDF...');
 
         const pdfBuffer = await page.pdf({
             format: 'A4',
@@ -84,39 +73,18 @@ app.post('/convert', async (req, res) => {
         });
 
         await browser.close();
+        console.log('PDF generato con successo');
 
-        // Invia il PDF direttamente al browser
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename=converted_${Date.now()}.pdf`);
         res.send(pdfBuffer);
 
     } catch (error) {
-        console.error('Error:', error);
-        res.status(500).json({ error: 'Errore durante la conversione: ' + error.message });
-    }
-});
-
-        await processPage(targetUrl);
-        await browser.close();
-
-        const timestamp = Date.now();
-        const dirPath = path.join(__dirname, 'downloads', `site_${timestamp}`);
-        await fs.mkdir(dirPath, { recursive: true });
-
-        for (const pdf of pdfs) {
-            await fs.writeFile(path.join(dirPath, pdf.filename), pdf.buffer);
-        }
-
-        res.json({
-            success: true,
-            message: 'Conversione completata',
-            outputDir: dirPath,
-            fileCount: pdfs.length
+        console.error('Errore dettagliato:', error);
+        res.status(500).json({ 
+            error: 'Errore durante la conversione', 
+            details: error.message 
         });
-
-    } catch (error) {
-        console.error('Error:', error);
-        res.status(500).json({ error: 'Errore durante la conversione' });
     }
 });
 
