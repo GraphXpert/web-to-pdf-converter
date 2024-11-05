@@ -21,8 +21,8 @@ app.use((req, res, next) => {
 
 // Configurazione del rate limiting
 const limiter = rateLimit({
-    windowMs: 60 * 60 * 1000, // 1 ora
-    max: 100, // limite di 100 richieste per IP
+    windowMs: 60 * 60 * 1000,
+    max: 100,
     message: 'Troppe richieste da questo IP, riprova tra un\'ora'
 });
 
@@ -31,6 +31,7 @@ app.use(express.json());
 app.use(express.static('public'));
 
 app.post('/convert', async (req, res) => {
+    let browser = null;
     try {
         const { targetUrl } = req.body;
         if (!targetUrl) {
@@ -39,27 +40,28 @@ app.post('/convert', async (req, res) => {
 
         console.log('Iniziando la conversione per:', targetUrl);
 
-        const browser = await puppeteer.launch({
+        // Configurazione specifica per Render.com
+        browser = await puppeteer.launch({
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
-                '--single-process'
+                '--disable-accelerated-2d-canvas',
+                '--disable-gpu',
+                '--window-size=1920x1080'
             ],
-            headless: true
+            headless: 'new',
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null
         });
 
         const page = await browser.newPage();
         await page.setViewport({ width: 1920, height: 1080 });
 
-        console.log('Browser avviato, navigazione alla pagina...');
-
+        // Aumenta il timeout e aggiungi gestione errori per il caricamento della pagina
         await page.goto(targetUrl, { 
             waitUntil: 'networkidle0',
-            timeout: 30000
+            timeout: 60000 // Aumentato a 60 secondi
         });
-
-        console.log('Pagina caricata, generazione PDF...');
 
         // Estrai il titolo della pagina per il nome del file
         const pageTitle = await page.title();
@@ -76,9 +78,6 @@ app.post('/convert', async (req, res) => {
             }
         });
 
-        await browser.close();
-        console.log('PDF generato con successo');
-
         // Imposta gli header per forzare il download
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="${sanitizedTitle}_${Date.now()}.pdf"`);
@@ -93,6 +92,14 @@ app.post('/convert', async (req, res) => {
             error: 'Errore durante la conversione', 
             details: error.message 
         });
+    } finally {
+        if (browser) {
+            try {
+                await browser.close();
+            } catch (error) {
+                console.error('Errore nella chiusura del browser:', error);
+            }
+        }
     }
 });
 
